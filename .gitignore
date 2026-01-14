@@ -3,3 +3,4 @@ agent.md
 node_modules/
 uploads/
 
+.env
