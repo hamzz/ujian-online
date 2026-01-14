@@ -1,0 +1,21 @@
+{
+  "name": "ujian-online-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --hot src/index.ts",
+    "start": "bun src/index.ts",
+    "seed": "bun src/seed.ts",
+    "seed:questions": "bun src/seed_questions.ts",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@elysiajs/cors": "^1.1.0",
+    "@elysiajs/jwt": "^1.1.0",
+    "bcryptjs": "^2.4.3",
+    "elysia": "^1.1.0",
+    "mysql2": "^3.11.0",
+    "xlsx": "^0.18.5"
+  }
+}
