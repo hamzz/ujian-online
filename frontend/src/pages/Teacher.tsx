@@ -3,6 +3,7 @@ import jsPDF from "jspdf";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { apiBaseUrl, apiDownload, apiFetch } from "../api";
 import { useAuthStore } from "../store/auth";
+import { useSchoolStore } from "../store/school";
 
 type Subject = { id: string; name: string };
 type Question = {
@@ -111,6 +112,11 @@ export default function TeacherPage() {
   const [importError, setImportError] = useState<string | null>(null);
   const [exportExamId, setExportExamId] = useState<string>("");
   const token = useAuthStore((state) => state.token);
+  const profile = useSchoolStore((state) => state.profile);
+  const setProfile = useSchoolStore((state) => state.setProfile);
+  const [themeColor, setThemeColor] = useState(profile?.themeColor || "#2563eb");
+  const [themeSaving, setThemeSaving] = useState(false);
+  const [themeMessage, setThemeMessage] = useState<string | null>(null);
 
   const subjectMap = useMemo(() => {
     return subjects.reduce<Record<string, string>>((acc, item) => {
@@ -123,6 +129,10 @@ export default function TeacherPage() {
     if (!examForm.subjectId) return questions;
     return questions.filter((q) => q.subject_id === examForm.subjectId);
   }, [questions, examForm.subjectId]);
+  const allSelected = useMemo(() => {
+    if (filteredQuestions.length === 0) return false;
+    return filteredQuestions.every((q) => selectedQuestions[q.id] !== undefined);
+  }, [filteredQuestions, selectedQuestions]);
   const selectedExam = useMemo(
     () => exams.find((exam) => exam.id === selectedExamId) || null,
     [exams, selectedExamId]
@@ -150,6 +160,35 @@ export default function TeacherPage() {
   useEffect(() => {
     loadAll();
   }, []);
+
+  useEffect(() => {
+    if (profile?.themeColor) {
+      setThemeColor(profile.themeColor);
+    }
+  }, [profile?.themeColor]);
+
+  async function handleThemeSave() {
+    setThemeSaving(true);
+    setThemeMessage(null);
+    try {
+      await apiFetch("/teacher/school-theme", {
+        method: "PUT",
+        body: JSON.stringify({ themeColor })
+      });
+      setProfile({
+        name: profile?.name || "Ujian Online",
+        tagline: profile?.tagline || "",
+        logoUrl: profile?.logoUrl || "",
+        bannerUrl: profile?.bannerUrl || "",
+        themeColor
+      });
+      setThemeMessage("Warna utama tersimpan.");
+    } catch (err: any) {
+      setThemeMessage(err.message || "Gagal menyimpan warna.");
+    } finally {
+      setThemeSaving(false);
+    }
+  }
 
   async function handleAddSubject(e: React.FormEvent) {
     e.preventDefault();
@@ -276,6 +315,26 @@ export default function TeacherPage() {
         copy[questionId] = 1;
       }
       return copy;
+    });
+  }
+
+  function toggleAllQuestions() {
+    setSelectedQuestions((prev) => {
+      const next = { ...prev };
+      const everySelected = filteredQuestions.length > 0 &&
+        filteredQuestions.every((q) => next[q.id] !== undefined);
+      if (everySelected) {
+        filteredQuestions.forEach((q) => {
+          delete next[q.id];
+        });
+        return next;
+      }
+      filteredQuestions.forEach((q) => {
+        if (next[q.id] === undefined) {
+          next[q.id] = 1;
+        }
+      });
+      return next;
     });
   }
 
@@ -469,61 +528,94 @@ export default function TeacherPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white shadow-sm">
-        <div className="mx-auto max-w-6xl px-6 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-semibold">Panel Guru</h1>
-            <p className="text-sm text-slate-500">Kelola bank soal, ujian, dan hasil.</p>
-          </div>
-          <button
-            className="text-sm rounded-lg border border-slate-200 px-4 py-2 hover:bg-slate-100"
-            onClick={loadAll}
-          >
-            Refresh
-          </button>
-        </div>
-      </header>
+    <div className="min-h-screen px-6 py-8">
+      <div className="mx-auto max-w-7xl grid gap-6 lg:grid-cols-[260px,1fr]">
+        <aside className="sidebar-glass rounded-3xl p-5 h-fit lg:sticky lg:top-6">
+          <div className="space-y-5">
+            <div>
+              <h1 className="text-xl font-semibold">Panel Guru</h1>
+              <p className="text-sm text-slate-500">Kelola bank soal, ujian, dan hasil.</p>
+            </div>
 
-      <main className="mx-auto max-w-6xl px-6 py-8 space-y-6">
-        <div className="flex flex-wrap gap-2">
-          {[
-            { id: "subjects", label: "Mata Pelajaran" },
-            { id: "questions", label: "Bank Soal" },
-            { id: "exams", label: "Ujian" },
-            { id: "imports", label: "Import/Export" }
-          ].map((item) => (
-            <button
-              key={item.id}
-              className={`rounded-full px-4 py-2 text-sm font-medium ${
-                tab === item.id ? "bg-brand-500 text-white" : "bg-white border border-slate-200"
-              }`}
-              onClick={() => setTab(item.id as any)}
-            >
-              {item.label}
+            <div className="space-y-2">
+              {[
+                { id: "subjects", label: "Mata Pelajaran" },
+                { id: "questions", label: "Bank Soal" },
+                { id: "exams", label: "Ujian" },
+                { id: "imports", label: "Import/Export" }
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  className={`w-full rounded-2xl px-4 py-2 text-left text-sm font-medium tab-pill ${
+                    tab === item.id ? "active" : ""
+                  }`}
+                  onClick={() => setTab(item.id as any)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="rounded-2xl bg-white/80 p-4 space-y-3">
+              <div>
+                <div className="text-sm font-semibold text-slate-700">Tema Kelas</div>
+                <p className="text-xs text-slate-500">Ubah warna utama platform.</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="color"
+                  className="h-10 w-14 rounded-lg border border-slate-200"
+                  value={themeColor}
+                  onChange={(e) => setThemeColor(e.target.value)}
+                />
+                <div className="text-xs text-slate-500">{themeColor}</div>
+              </div>
+              <button
+                className="w-full rounded-xl btn-primary py-2 text-sm font-medium"
+                onClick={handleThemeSave}
+                disabled={themeSaving}
+              >
+                {themeSaving ? "Menyimpan..." : "Simpan Tema"}
+              </button>
+              {themeMessage && <p className="text-xs text-slate-500">{themeMessage}</p>}
+            </div>
+
+            <button className="w-full rounded-xl btn-outline px-4 py-2 text-sm" onClick={loadAll}>
+              Refresh Data
             </button>
-          ))}
-        </div>
+          </div>
+        </aside>
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        {loading && <p className="text-sm text-slate-500">Memuat data...</p>}
+        <main className="space-y-6">
+          <div className="floating-nav rounded-3xl px-6 py-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">Workspace Guru</h2>
+              <p className="text-sm text-slate-500">Atur soal, ujian, sesi, dan laporan.</p>
+            </div>
+            <div className="text-xs text-slate-500">
+              {loading ? "Memuat data..." : "Semua data terbaru."}
+            </div>
+          </div>
+
+          {error && <p className="text-sm text-red-600">{error}</p>}
+          {loading && <p className="text-sm text-slate-500">Memuat data...</p>}
 
         {tab === "subjects" && (
           <div className="grid gap-6 lg:grid-cols-[1fr,2fr]">
-            <form onSubmit={handleAddSubject} className="bg-white rounded-2xl shadow p-6 space-y-3">
+            <form onSubmit={handleAddSubject} className="glass-card rounded-3xl p-6 space-y-3">
               <h2 className="font-semibold">Tambah Mata Pelajaran</h2>
               <input
-                className="w-full rounded-lg border border-slate-200 px-3 py-2"
+                className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2"
                 placeholder="Nama mapel"
                 value={subjectName}
                 onChange={(e) => setSubjectName(e.target.value)}
               />
-              <button className="w-full rounded-lg bg-brand-500 text-white py-2 font-medium">
+              <button className="w-full rounded-xl btn-primary py-2 font-medium">
                 Simpan
               </button>
             </form>
 
-            <div className="bg-white rounded-2xl shadow p-6">
+            <div className="glass-card rounded-3xl p-6">
               <h2 className="font-semibold">Daftar Mata Pelajaran</h2>
               <div className="mt-4 space-y-2">
                 {subjects.map((subject) => (
@@ -550,13 +642,13 @@ export default function TeacherPage() {
           <div className="grid gap-6 lg:grid-cols-[1.2fr,2fr]">
             <form
               onSubmit={editingQuestionId ? handleUpdateQuestion : handleAddQuestion}
-              className="bg-white rounded-2xl shadow p-6 space-y-3"
+              className="glass-card rounded-3xl p-6 space-y-3"
             >
               <h2 className="font-semibold">
                 {editingQuestionId ? "Edit Soal" : "Tambah Soal"}
               </h2>
               <select
-                className="w-full rounded-lg border border-slate-200 px-3 py-2"
+                className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2"
                 value={questionForm.subjectId}
                 onChange={(e) => setQuestionForm((prev) => ({ ...prev, subjectId: e.target.value }))}
                 disabled={Boolean(editingQuestionId)}
@@ -569,7 +661,7 @@ export default function TeacherPage() {
                 ))}
               </select>
               <select
-                className="w-full rounded-lg border border-slate-200 px-3 py-2"
+                className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2"
                 value={questionForm.type}
                 onChange={(e) => setQuestionForm((prev) => ({ ...prev, type: e.target.value }))}
               >
@@ -580,19 +672,19 @@ export default function TeacherPage() {
                 ))}
               </select>
               <textarea
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 min-h-[120px]"
+                className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 min-h-[120px]"
                 placeholder="Isi soal"
                 value={questionForm.content}
                 onChange={(e) => setQuestionForm((prev) => ({ ...prev, content: e.target.value }))}
               />
               <input
-                className="w-full rounded-lg border border-slate-200 px-3 py-2"
+                className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2"
                 placeholder="Opsi jawaban (pisahkan dengan koma)"
                 value={questionForm.options}
                 onChange={(e) => setQuestionForm((prev) => ({ ...prev, options: e.target.value }))}
               />
               <input
-                className="w-full rounded-lg border border-slate-200 px-3 py-2"
+                className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2"
                 placeholder="Kunci jawaban"
                 value={questionForm.answerKey}
                 onChange={(e) => setQuestionForm((prev) => ({ ...prev, answerKey: e.target.value }))}
@@ -600,7 +692,7 @@ export default function TeacherPage() {
               {questionForm.type === "short_answer" && (
                 <>
                   <select
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2"
+                    className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2"
                     value={questionForm.mode}
                     onChange={(e) => setQuestionForm((prev) => ({ ...prev, mode: e.target.value }))}
                   >
@@ -608,7 +700,7 @@ export default function TeacherPage() {
                     <option value="keywords">Keywords</option>
                   </select>
                   <input
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2"
+                    className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2"
                     placeholder="Keywords (koma)"
                     value={questionForm.keywords}
                     onChange={(e) => setQuestionForm((prev) => ({ ...prev, keywords: e.target.value }))}
@@ -666,13 +758,13 @@ export default function TeacherPage() {
                   </div>
                 )}
               </div>
-              <button className="w-full rounded-lg bg-brand-500 text-white py-2 font-medium">
+              <button className="w-full rounded-xl btn-primary py-2 font-medium">
                 {editingQuestionId ? "Update Soal" : "Simpan Soal"}
               </button>
               {editingQuestionId && (
                 <button
                   type="button"
-                  className="w-full rounded-lg border border-slate-200 py-2 text-sm"
+                  className="w-full rounded-xl btn-outline py-2 text-sm"
                   onClick={() => {
                     setEditingQuestionId(null);
                     setQuestionForm({
@@ -692,13 +784,13 @@ export default function TeacherPage() {
               )}
             </form>
 
-            <div className="bg-white rounded-2xl shadow p-6">
+            <div className="glass-card rounded-3xl p-6">
               <h2 className="font-semibold">Daftar Soal</h2>
               <div className="mt-4 space-y-3">
                 {questions.map((question) => (
-                  <div key={question.id} className="border border-slate-100 rounded-xl p-3">
+                  <div key={question.id} className="soft-card rounded-2xl p-3 hover-float">
                     <div className="text-xs text-slate-500">
-                      {subjectMap[question.subject_id] || "Mapel"} • {question.type}
+                      {subjectMap[question.subject_id] || "Mapel"} - {question.type}
                     </div>
                     <p className="mt-2 text-sm">{question.content}</p>
                     <div className="mt-2 text-xs text-slate-500">ID: {question.id}</div>
@@ -759,22 +851,22 @@ export default function TeacherPage() {
 
         {tab === "exams" && (
           <div className="grid gap-6 lg:grid-cols-[1.4fr,2fr]">
-            <form onSubmit={handleCreateExam} className="bg-white rounded-2xl shadow p-6 space-y-3">
+            <form onSubmit={handleCreateExam} className="glass-card rounded-3xl p-6 space-y-3">
               <h2 className="font-semibold">Buat Ujian</h2>
               <input
-                className="w-full rounded-lg border border-slate-200 px-3 py-2"
+                className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2"
                 placeholder="Judul ujian"
                 value={examForm.title}
                 onChange={(e) => setExamForm((prev) => ({ ...prev, title: e.target.value }))}
               />
               <textarea
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 min-h-[90px]"
+                className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 min-h-[90px]"
                 placeholder="Instruksi ujian"
                 value={examForm.instructions}
                 onChange={(e) => setExamForm((prev) => ({ ...prev, instructions: e.target.value }))}
               />
               <select
-                className="w-full rounded-lg border border-slate-200 px-3 py-2"
+                className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2"
                 value={examForm.subjectId}
                 onChange={(e) => setExamForm((prev) => ({ ...prev, subjectId: e.target.value }))}
               >
@@ -788,7 +880,7 @@ export default function TeacherPage() {
               <div className="grid grid-cols-2 gap-3">
                 <input
                   type="number"
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2"
+                  className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2"
                   value={examForm.durationMinutes}
                   onChange={(e) =>
                     setExamForm((prev) => ({ ...prev, durationMinutes: Number(e.target.value) }))
@@ -796,14 +888,14 @@ export default function TeacherPage() {
                 />
                 <input
                   type="datetime-local"
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2"
+                  className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2"
                   value={examForm.startTime}
                   onChange={(e) => setExamForm((prev) => ({ ...prev, startTime: e.target.value }))}
                 />
               </div>
               <input
                 type="datetime-local"
-                className="w-full rounded-lg border border-slate-200 px-3 py-2"
+                className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2"
                 value={examForm.deadline}
                 onChange={(e) => setExamForm((prev) => ({ ...prev, deadline: e.target.value }))}
               />
@@ -833,7 +925,18 @@ export default function TeacherPage() {
               </label>
 
               <div className="rounded-xl border border-slate-100 p-3">
-                <div className="text-sm font-medium">Pilih Soal</div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-sm font-medium">Pilih Soal</div>
+                  <label className="flex items-center gap-2 text-xs text-slate-500">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleAllQuestions}
+                      disabled={filteredQuestions.length === 0}
+                    />
+                    Pilih semua
+                  </label>
+                </div>
                 <div className="mt-2 max-h-60 overflow-y-auto space-y-2">
                   {filteredQuestions.map((question) => {
                     const selected = selectedQuestions[question.id] !== undefined;
@@ -869,17 +972,17 @@ export default function TeacherPage() {
                 </div>
               </div>
 
-              <button className="w-full rounded-lg bg-brand-500 text-white py-2 font-medium">
+              <button className="w-full rounded-xl btn-primary py-2 font-medium">
                 Simpan Ujian
               </button>
             </form>
 
             <div className="space-y-4">
-              <div className="bg-white rounded-2xl shadow p-6">
+              <div className="glass-card rounded-3xl p-6">
                 <h2 className="font-semibold">Daftar Ujian</h2>
                 <div className="mt-4 space-y-3">
                   {exams.map((exam) => (
-                    <div key={exam.id} className="border border-slate-100 rounded-xl p-3">
+                    <div key={exam.id} className="soft-card rounded-2xl p-3">
                       <div className="text-xs text-slate-500">
                         Kode: <span className="font-semibold text-slate-700">{exam.code}</span>
                       </div>
@@ -901,24 +1004,24 @@ export default function TeacherPage() {
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl shadow p-6">
+              <div className="glass-card rounded-3xl p-6">
                 <h2 className="font-semibold">Ringkasan Sesi</h2>
                 {selectedExamId ? (
                   <>
                     {loadingSessions && <p className="text-sm text-slate-500 mt-2">Memuat sesi...</p>}
                     {summary && (
                       <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                        <div className="rounded-lg border border-slate-100 p-3">Total sesi: {summary.total_sessions}</div>
-                        <div className="rounded-lg border border-slate-100 p-3">Submit: {summary.submitted_count}</div>
-                        <div className="rounded-lg border border-slate-100 p-3">Graded: {summary.graded_count}</div>
-                        <div className="rounded-lg border border-slate-100 p-3">
+                        <div className="rounded-2xl border border-slate-100 p-3">Total sesi: {summary.total_sessions}</div>
+                        <div className="rounded-2xl border border-slate-100 p-3">Submit: {summary.submitted_count}</div>
+                        <div className="rounded-2xl border border-slate-100 p-3">Graded: {summary.graded_count}</div>
+                        <div className="rounded-2xl border border-slate-100 p-3">
                           Rata-rata: {summary.average_score ? summary.average_score.toFixed(2) : "-"}
                         </div>
                       </div>
                     )}
                     <div className="mt-4 space-y-2">
                       {sessions.map((session) => (
-                        <div key={session.id} className="border border-slate-100 rounded-xl p-3 text-sm">
+                        <div key={session.id} className="soft-card rounded-2xl p-3 text-sm">
                           <div className="font-medium">{session.user_email}</div>
                           <div className="text-xs text-slate-500">Status: {session.status}</div>
                           <div className="text-xs text-slate-500">
@@ -926,19 +1029,19 @@ export default function TeacherPage() {
                           </div>
                           <div className="mt-3 flex flex-wrap gap-2">
                             <button
-                              className="text-xs rounded border border-slate-200 px-2 py-1 text-brand-700"
+                              className="text-xs rounded-xl border border-slate-200 px-2 py-1 text-brand-700"
                               onClick={() => downloadStudentReport(session.id)}
                             >
                               Rapor PDF
                             </button>
                             <button
-                              className="text-xs rounded border border-slate-200 px-2 py-1"
+                              className="text-xs rounded-xl border border-slate-200 px-2 py-1"
                               onClick={() => downloadStudentReportFile(session.id, "csv")}
                             >
                               CSV
                             </button>
                             <button
-                              className="text-xs rounded border border-slate-200 px-2 py-1"
+                              className="text-xs rounded-xl border border-slate-200 px-2 py-1"
                               onClick={() => downloadStudentReportFile(session.id, "xlsx")}
                             >
                               Excel
@@ -967,7 +1070,7 @@ export default function TeacherPage() {
                         <div className="mt-3 space-y-4 text-sm">
                           <div className="flex flex-wrap items-center gap-2">
                             <button
-                              className="rounded-lg border border-slate-200 px-3 py-2 text-xs"
+                              className="rounded-xl border border-slate-200 px-3 py-2 text-xs"
                               onClick={async () => {
                                 if (!selectedExamId) return;
                                 const blob = await apiDownload(
@@ -984,13 +1087,13 @@ export default function TeacherPage() {
                               Download Analytics CSV
                             </button>
                             <button
-                              className="rounded-lg bg-brand-500 text-white px-3 py-2 text-xs"
+                              className="rounded-xl btn-primary px-3 py-2 text-xs"
                               onClick={downloadAnalyticsPdf}
                             >
                               Download Analytics PDF
                             </button>
                           </div>
-                          <div className="rounded-2xl border border-slate-100 p-4">
+                          <div className="rounded-2xl border border-slate-100 bg-white/70 p-4">
                             <div className="text-sm font-medium mb-2">Distribusi Nilai</div>
                             <div className="h-48">
                               <ResponsiveContainer width="100%" height="100%">
@@ -998,7 +1101,7 @@ export default function TeacherPage() {
                                   <XAxis dataKey="label" />
                                   <YAxis allowDecimals={false} />
                                   <Tooltip />
-                                  <Bar dataKey="count" fill="#2563eb" radius={[6, 6, 0, 0]} />
+                                  <Bar dataKey="count" fill="rgb(var(--brand-500))" radius={[6, 6, 0, 0]} />
                                 </BarChart>
                               </ResponsiveContainer>
                             </div>
@@ -1053,7 +1156,7 @@ export default function TeacherPage() {
 
         {tab === "imports" && (
           <div className="grid gap-6 lg:grid-cols-2">
-            <div className="bg-white rounded-2xl shadow p-6 space-y-3">
+            <div className="glass-card rounded-3xl p-6 space-y-3">
               <h2 className="font-semibold">Import Siswa (Excel/CSV)</h2>
               <p className="text-sm text-slate-500">
                 Kolom: NIS, nama, kelas, email. Password default: Siswa123!
@@ -1076,7 +1179,7 @@ export default function TeacherPage() {
               />
             </div>
 
-            <div className="bg-white rounded-2xl shadow p-6 space-y-3">
+            <div className="glass-card rounded-3xl p-6 space-y-3">
               <h2 className="font-semibold">Import Soal (Excel/CSV)</h2>
               <p className="text-sm text-slate-500">
                 Kolom: mapel, type, content, options, answer_key, mode, keywords, explanation.
@@ -1099,11 +1202,11 @@ export default function TeacherPage() {
               />
             </div>
 
-            <div className="bg-white rounded-2xl shadow p-6 space-y-3 lg:col-span-2">
+            <div className="glass-card rounded-3xl p-6 space-y-3 lg:col-span-2">
               <h2 className="font-semibold">Export Nilai Ujian</h2>
               <div className="flex flex-wrap items-center gap-3">
                 <select
-                  className="rounded-lg border border-slate-200 px-3 py-2"
+                  className="rounded-xl border border-slate-200 bg-white/80 px-3 py-2"
                   value={exportExamId}
                   onChange={(e) => setExportExamId(e.target.value)}
                 >
@@ -1115,7 +1218,7 @@ export default function TeacherPage() {
                   ))}
                 </select>
                 <button
-                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm"
+                  className="rounded-xl border border-slate-200 px-4 py-2 text-sm"
                   disabled={!exportExamId}
                   onClick={async () => {
                     if (!exportExamId) return;
@@ -1131,7 +1234,7 @@ export default function TeacherPage() {
                   Download CSV
                 </button>
                 <button
-                  className="rounded-lg bg-brand-500 text-white px-4 py-2 text-sm"
+                  className="rounded-xl btn-primary px-4 py-2 text-sm"
                   disabled={!exportExamId}
                   onClick={async () => {
                     if (!exportExamId) return;
@@ -1153,6 +1256,7 @@ export default function TeacherPage() {
           </div>
         )}
       </main>
+    </div>
     </div>
   );
 }

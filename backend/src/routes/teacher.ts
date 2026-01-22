@@ -619,4 +619,25 @@ export const teacherRoutes = new Elysia({ prefix: "/teacher" })
     );
     await query("UPDATE exam_sessions SET status = 'graded' WHERE id = ?", [id]);
     return { id, totalScore: total, gradeLetter: letter };
+  })
+  .put("/school-theme", async ({ auth, body, set }) => {
+    if (!ensureTeacher(auth)) {
+      set.status = 403;
+      return { error: "Teacher access required" };
+    }
+    const { themeColor } = body as any;
+    if (!themeColor) {
+      set.status = 400;
+      return { error: "themeColor required" };
+    }
+    const existing = await queryOne<any>("SELECT id FROM school_profile WHERE id = 1");
+    if (existing) {
+      await query("UPDATE school_profile SET theme_color = ? WHERE id = 1", [themeColor]);
+    } else {
+      await query(
+        "INSERT INTO school_profile (id, name, tagline, logo_url, banner_url, theme_color) VALUES (1, ?, ?, ?, ?, ?)",
+        ["Ujian Online", "Platform ujian sekolah", null, null, themeColor]
+      );
+    }
+    return { ok: true };
   });

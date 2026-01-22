@@ -31,13 +31,18 @@ export default function ExamStartPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 px-6 py-12">
-      <div className="mx-auto max-w-lg bg-white rounded-2xl shadow p-6">
-        <h2 className="text-xl font-semibold">Mulai Ujian</h2>
-        <p className="text-sm text-slate-600 mt-2">Masukkan kode ujian yang diberikan guru.</p>
+    <div className="min-h-screen px-6 py-12">
+      <div className="mx-auto max-w-2xl glass-card rounded-3xl p-8">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold">Mulai Ujian</h2>
+            <p className="text-sm text-slate-600 mt-2">Masukkan kode ujian yang diberikan guru.</p>
+          </div>
+          <div className="rounded-2xl bg-brand-50 px-3 py-2 text-xs text-brand-700">Ready Check</div>
+        </div>
         <form onSubmit={handleStart} className="mt-6 space-y-4">
           <input
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 uppercase tracking-widest"
+            className="w-full rounded-xl border border-slate-200 bg-white/80 px-4 py-3 uppercase tracking-[0.3em]"
             placeholder="KODEUJIAN"
             value={code}
             onChange={(e) => setCode(e.target.value.toUpperCase())}
@@ -63,7 +68,7 @@ export default function ExamStartPage() {
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <button
-            className="w-full rounded-lg bg-brand-500 text-white py-2 font-medium hover:bg-brand-700"
+            className="w-full rounded-xl btn-primary py-3 font-medium"
             type="submit"
             disabled={loading || !agreeIntegrity || !deviceReady}
           >

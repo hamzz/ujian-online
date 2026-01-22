@@ -165,7 +165,7 @@ export default function ExamSessionPage() {
 
   if (!session) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="min-h-screen flex items-center justify-center">
         <p className="text-slate-600">Session tidak ditemukan.</p>
       </div>
     );
@@ -175,23 +175,27 @@ export default function ExamSessionPage() {
   const timeWarning = remainingMs < 10 * 60 * 1000;
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white shadow-sm">
-        <div className="mx-auto max-w-6xl px-6 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+    <div className="min-h-screen">
+      <header className="mx-auto max-w-6xl px-6 pt-6">
+        <div className="floating-nav rounded-3xl px-6 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div>
             <h1 className="text-lg font-semibold">{session.exam.title}</h1>
             <p className="text-sm text-slate-500">{session.exam.instructions}</p>
           </div>
-          <div className={`rounded-lg px-4 py-2 font-semibold ${timeWarning ? "bg-red-100 text-red-700" : "bg-brand-50 text-brand-700"}`}>
+          <div
+            className={`rounded-2xl px-4 py-2 text-sm font-semibold ${
+              timeWarning ? "bg-red-100 text-red-700" : "bg-brand-50 text-brand-700"
+            }`}
+          >
             {formatTime(remainingMs)}
           </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-6xl px-6 py-6 grid gap-6 lg:grid-cols-[2fr,1fr]">
-        <section className="bg-white rounded-2xl shadow p-6">
+        <section className="glass-card rounded-3xl p-6">
           {warnings >= 3 && (
-            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-700">
+            <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-700">
               Peringatan: terdeteksi pindah tab beberapa kali. Mohon fokus pada ujian.
             </div>
           )}
@@ -210,10 +214,7 @@ export default function ExamSessionPage() {
               {question.metadata.images.slice(0, 3).map((url: string) => {
                 const src = url.startsWith("http") ? url : `${apiBaseUrl}${url}`;
                 return (
-                <div
-                  key={url}
-                  className="w-full rounded-xl border border-slate-100 bg-slate-50 p-2"
-                >
+                <div key={url} className="w-full rounded-2xl border border-slate-100 bg-white/70 p-2">
                   <img
                     src={src}
                     alt="Ilustrasi soal"
@@ -290,7 +291,7 @@ export default function ExamSessionPage() {
 
             {question.type === "short_answer" && (
               <input
-                className="w-full rounded-lg border border-slate-200 px-3 py-2"
+                className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2"
                 value={answers[question.id] || ""}
                 onChange={(e) => {
                   setAnswers((prev) => ({ ...prev, [question.id]: e.target.value }));
@@ -301,7 +302,7 @@ export default function ExamSessionPage() {
 
             {question.type === "essay" && (
               <textarea
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 min-h-[140px]"
+                className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 min-h-[140px]"
                 value={answers[question.id] || ""}
                 onChange={(e) => {
                   setAnswers((prev) => ({ ...prev, [question.id]: e.target.value }));
@@ -313,11 +314,11 @@ export default function ExamSessionPage() {
         </section>
 
         <aside className="space-y-4">
-          <div className="bg-white rounded-2xl shadow p-4 space-y-2">
+          <div className="glass-card rounded-3xl p-4 space-y-2">
             <div className="text-sm text-slate-500">Kepatuhan Ujian</div>
             <div className="text-sm">Peringatan: {warnings}</div>
             <button
-              className="w-full rounded-lg border border-slate-200 py-2 text-sm"
+              className="w-full rounded-xl btn-outline py-2 text-sm"
               onClick={async () => {
                 if (!document.fullscreenElement) {
                   await document.documentElement.requestFullscreen().catch(() => undefined);
@@ -327,7 +328,7 @@ export default function ExamSessionPage() {
               {isFullscreen ? "Fullscreen aktif" : "Masuk Fullscreen"}
             </button>
           </div>
-          <div className="bg-white rounded-2xl shadow p-4">
+          <div className="glass-card rounded-3xl p-4">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-semibold">Navigasi</h3>
               <span className="text-xs text-slate-500">{saving ? "Menyimpan..." : "Tersimpan"}</span>
@@ -339,7 +340,7 @@ export default function ExamSessionPage() {
                 return (
                   <button
                     key={q.id}
-                    className={`rounded-md px-2 py-1 text-xs font-medium border ${
+                    className={`rounded-lg px-2 py-1 text-xs font-medium border ${
                       index === current
                         ? "border-brand-500 bg-brand-50"
                         : answered
@@ -357,23 +358,23 @@ export default function ExamSessionPage() {
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl shadow p-4 space-y-3">
+          <div className="glass-card rounded-3xl p-4 space-y-3">
             <button
-              className="w-full rounded-lg border border-slate-200 py-2"
+              className="w-full rounded-xl btn-outline py-2"
               onClick={() => setCurrent((prev) => Math.max(prev - 1, 0))}
               disabled={current === 0}
             >
               Sebelumnya
             </button>
             <button
-              className="w-full rounded-lg border border-slate-200 py-2"
+              className="w-full rounded-xl btn-outline py-2"
               onClick={() => setCurrent((prev) => Math.min(prev + 1, session.questions.length - 1))}
               disabled={current === session.questions.length - 1}
             >
               Berikutnya
             </button>
             <button
-              className="w-full rounded-lg bg-brand-500 text-white py-2 font-medium hover:bg-brand-700"
+              className="w-full rounded-xl btn-primary py-2 font-medium"
               onClick={handleFinish}
             >
               Submit Ujian
@@ -388,32 +389,32 @@ export default function ExamSessionPage() {
           onClick={() => setZoomImage(null)}
         >
           <div
-            className="relative max-w-5xl w-full bg-white rounded-2xl shadow-xl p-4"
+            className="relative max-w-5xl w-full glass-card rounded-3xl p-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-3">
               <div className="text-sm font-medium text-slate-700">Zoom Gambar</div>
               <div className="flex items-center gap-2">
                 <button
-                  className="rounded-lg border border-slate-200 px-3 py-1 text-sm"
+                  className="rounded-xl btn-outline px-3 py-1 text-sm"
                   onClick={() => setZoomScale((prev) => Math.max(0.5, prev - 0.25))}
                 >
                   -
                 </button>
                 <button
-                  className="rounded-lg border border-slate-200 px-3 py-1 text-sm"
+                  className="rounded-xl btn-outline px-3 py-1 text-sm"
                   onClick={() => setZoomScale(1)}
                 >
                   Reset
                 </button>
                 <button
-                  className="rounded-lg border border-slate-200 px-3 py-1 text-sm"
+                  className="rounded-xl btn-outline px-3 py-1 text-sm"
                   onClick={() => setZoomScale((prev) => Math.min(3, prev + 0.25))}
                 >
                   +
                 </button>
                 <button
-                  className="rounded-lg border border-slate-200 px-3 py-1 text-sm"
+                  className="rounded-xl btn-outline px-3 py-1 text-sm"
                   onClick={() => setZoomImage(null)}
                 >
                   Tutup

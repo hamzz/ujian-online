@@ -52,37 +52,37 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-slate-950 text-white px-4 py-10">
-      <div className="absolute inset-0 opacity-70">
+    <div className="min-h-screen relative overflow-hidden px-4 py-12">
+      <div className="absolute inset-0">
         <div
-          className="absolute inset-0"
+          className="absolute inset-0 opacity-80"
           style={{
             backgroundImage: profile?.bannerUrl
-              ? `linear-gradient(120deg, rgba(15,23,42,0.85), rgba(37,99,235,0.6)), url(${profile.bannerUrl})`
-              : "radial-gradient(circle at top left, #1e3a8a, #020617 55%)"
+              ? `linear-gradient(120deg, rgba(255,255,255,0.9), rgba(236,253,245,0.7)), url(${profile.bannerUrl})`
+              : "radial-gradient(circle at top left, rgba(191,219,254,0.9), rgba(224,231,255,0.6) 55%)"
           }}
         />
       </div>
-      <div className="relative z-10 mx-auto max-w-5xl grid gap-8 lg:grid-cols-[1.1fr,1fr] items-center">
-        <div className="space-y-6">
-          <div className="inline-flex items-center gap-3 rounded-full bg-white/10 px-4 py-2 text-sm">
+      <div className="relative z-10 mx-auto max-w-5xl grid gap-10 lg:grid-cols-[1.1fr,1fr] items-center">
+        <div className="space-y-6 text-slate-900">
+          <div className="inline-flex items-center gap-3 rounded-full bg-white/70 px-4 py-2 text-sm shadow-sm">
             <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-            Exam platform for schools
+            Platform ujian sekolah modern
           </div>
           <h1 className="text-4xl md:text-5xl font-semibold leading-tight">
             {profile?.name || "Ujian Online"}
           </h1>
-          <p className="text-lg text-slate-200">
+          <p className="text-lg text-slate-600">
             {profile?.tagline || "Kelola ujian, bank soal, dan nilai dalam satu platform."}
           </p>
-          <div className="flex items-center gap-4 text-sm text-slate-300">
-            <div className="rounded-lg bg-white/10 px-3 py-2">Secure Access</div>
-            <div className="rounded-lg bg-white/10 px-3 py-2">Realtime Monitoring</div>
-            <div className="rounded-lg bg-white/10 px-3 py-2">Auto Grading</div>
+          <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600">
+            <div className="rounded-xl bg-white/70 px-3 py-2 shadow-sm">Secure Access</div>
+            <div className="rounded-xl bg-white/70 px-3 py-2 shadow-sm">Realtime Monitoring</div>
+            <div className="rounded-xl bg-white/70 px-3 py-2 shadow-sm">Auto Grading</div>
           </div>
         </div>
 
-        <div className="w-full max-w-lg bg-white text-slate-900 shadow-2xl rounded-3xl p-8 border border-white/40 backdrop-blur">
+        <div className="w-full max-w-lg glass-card text-slate-900 rounded-3xl p-8 border border-white/60 backdrop-blur">
           <div className="flex items-center gap-3">
             {profile?.logoUrl ? (
               <img src={profile.logoUrl} alt="Logo" className="h-10 w-10 rounded-full object-cover" />
@@ -101,7 +101,7 @@ export default function LoginPage() {
           <div>
             <label className="text-sm text-slate-600">Email</label>
             <input
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -111,7 +111,7 @@ export default function LoginPage() {
           <div>
             <label className="text-sm text-slate-600">Password</label>
             <input
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -120,8 +120,7 @@ export default function LoginPage() {
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <button
-            className="w-full rounded-lg text-white py-2 font-medium transition"
-            style={{ backgroundColor: profile?.themeColor || "#2563eb" }}
+            className="w-full rounded-xl text-white py-2 font-medium btn-primary"
             type="submit"
             disabled={loading}
           >
@@ -141,7 +140,7 @@ export default function LoginPage() {
               <div>
                 <label className="text-sm text-slate-600">Role</label>
                 <select
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 bg-white/80"
                   value={role}
                   onChange={(e) => setRole(e.target.value as any)}
                 >
@@ -151,7 +150,7 @@ export default function LoginPage() {
                 </select>
               </div>
               <button
-                className="w-full rounded-lg border border-brand-500 text-brand-700 py-2 font-medium hover:bg-brand-50 transition"
+                className="w-full rounded-xl border border-brand-500 text-brand-700 py-2 font-medium hover:bg-brand-50 transition"
                 type="submit"
                 disabled={loading}
               >
