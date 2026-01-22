@@ -1,13 +1,13 @@
-FROM oven/bun:1.1.25 AS base
-
+FROM oven/bun:1.1.30 AS base
 WORKDIR /app
-COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile
 
-COPY src ./src
-COPY schema.sql ./schema.sql
+FROM base AS deps
+COPY package.json bun.lockb* ./
+RUN bun install --production
 
+FROM base AS runner
 ENV NODE_ENV=production
-EXPOSE 3001
-
+COPY --from=deps /app/node_modules /app/node_modules
+COPY src ./src
+COPY package.json ./package.json
 CMD ["bun", "src/index.ts"]

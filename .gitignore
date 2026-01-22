@@ -1,5 +1,8 @@
 .env
-agent.md
-
 node_modules/
-uploads/
+dist/
+
+backend/data/
+upload/
+
+agent.md

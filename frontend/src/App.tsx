@@ -1,126 +1,157 @@
-import { useEffect } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
-import { useAuthStore } from "./store/auth";
-import { useSchoolStore } from "./store/school";
-import LoginPage from "./pages/Login";
-import DashboardPage from "./pages/Dashboard";
-import ExamStartPage from "./pages/ExamStart";
-import ExamSessionPage from "./pages/ExamSession";
-import ResultPage from "./pages/Result";
-import TeacherPage from "./pages/Teacher";
-import AdminUsersPage from "./pages/AdminUsers";
-
-function ProtectedRoute({ children }: { children: JSX.Element }) {
-  const token = useAuthStore((state) => state.token);
-  if (!token) return <Navigate to="/login" replace />;
-  return children;
-}
-
-function RoleRoute({
-  children,
-  roles
-}: {
-  children: JSX.Element;
-  roles: Array<"admin" | "teacher" | "student">;
-}) {
-  const user = useAuthStore((state) => state.user);
-  if (!user) return <Navigate to="/login" replace />;
-  if (!roles.includes(user.role)) return <Navigate to="/" replace />;
-  return children;
-}
+import { useEffect } from 'react';
+import { Route, Routes } from 'react-router-dom';
+import Shell from './components/Shell';
+import ProtectedRoute from './components/ProtectedRoute';
+import { hydrateAuth, useAuthStore } from './store';
+import Home from './pages/Home';
+import Login from './pages/Login';
+import AdminUsers from './pages/AdminUsers';
+import AdminStats from './pages/AdminStats';
+import AdminConfig from './pages/AdminConfig';
+import TeacherQuestions from './pages/TeacherQuestions';
+import TeacherExams from './pages/TeacherExams';
+import TeacherGrading from './pages/TeacherGrading';
+import TeacherResults from './pages/TeacherResults';
+import Reports from './pages/Reports';
+import Announcements from './pages/Announcements';
+import Notifications from './pages/Notifications';
+import StudentExams from './pages/StudentExams';
+import TakeExam from './pages/TakeExam';
+import Results from './pages/Results';
 
 export default function App() {
-  const loadSchool = useSchoolStore((state) => state.load);
-  const themeColor = useSchoolStore((state) => state.profile?.themeColor);
+  const { setAuth } = useAuthStore();
 
   useEffect(() => {
-    function hexToRgb(value: string) {
-      const normalized = value.replace("#", "").trim();
-      if (![3, 6].includes(normalized.length)) return null;
-      const hex = normalized.length === 3 ? normalized.split("").map((c) => c + c).join("") : normalized;
-      const int = Number.parseInt(hex, 16);
-      if (Number.isNaN(int)) return null;
-      return {
-        r: (int >> 16) & 255,
-        g: (int >> 8) & 255,
-        b: int & 255
-      };
+    const existing = hydrateAuth();
+    if (existing) setAuth(existing.user, existing.token);
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme) {
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    } else {
+      fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:4000'}/school-profile`)
+        .then((res) => res.json())
+        .then((data) => {
+          const theme = data?.theme_color || 'sekolah';
+          document.documentElement.setAttribute('data-theme', theme);
+          localStorage.setItem('theme', theme);
+        })
+        .catch(() => {
+          document.documentElement.setAttribute('data-theme', 'sekolah');
+        });
     }
-
-    function mix(color: { r: number; g: number; b: number }, target: { r: number; g: number; b: number }, amount: number) {
-      return {
-        r: Math.round(color.r + (target.r - color.r) * amount),
-        g: Math.round(color.g + (target.g - color.g) * amount),
-        b: Math.round(color.b + (target.b - color.b) * amount)
-      };
-    }
-
-    const base = hexToRgb(themeColor || "#2563eb");
-    if (!base) return;
-    const root = document.documentElement;
-    const toVar = (color: { r: number; g: number; b: number }) => `${color.r} ${color.g} ${color.b}`;
-    root.style.setProperty("--brand-500", toVar(base));
-    root.style.setProperty("--brand-600", toVar(mix(base, { r: 0, g: 0, b: 0 }, 0.18)));
-    root.style.setProperty("--brand-700", toVar(mix(base, { r: 0, g: 0, b: 0 }, 0.28)));
-    root.style.setProperty("--brand-100", toVar(mix(base, { r: 255, g: 255, b: 255 }, 0.78)));
-    root.style.setProperty("--brand-50", toVar(mix(base, { r: 255, g: 255, b: 255 }, 0.9)));
-  }, [themeColor]);
-
-  useEffect(() => {
-    loadSchool().catch(() => undefined);
-  }, [loadSchool]);
+  }, [setAuth]);
 
   return (
-    <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route
-        path="/"
-        element={
-          <ProtectedRoute>
-            <DashboardPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/exam/start"
-        element={
-          <ProtectedRoute>
-            <ExamStartPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/exam/session/:sessionId"
-        element={
-          <ProtectedRoute>
-            <ExamSessionPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/exam/result/:sessionId"
-        element={
-          <ProtectedRoute>
-            <ResultPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/teacher"
-        element={
-          <RoleRoute roles={["teacher", "admin"]}>
-            <TeacherPage />
-          </RoleRoute>
-        }
-      />
-      <Route
-        path="/admin/users"
-        element={
-          <RoleRoute roles={["admin"]}>
-            <AdminUsersPage />
-          </RoleRoute>
-        }
-      />
-    </Routes>
+    <Shell>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/login" element={<Login />} />
+        <Route
+          path="/admin/users"
+          element={
+            <ProtectedRoute roles={['admin']}>
+              <AdminUsers />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/config"
+          element={
+            <ProtectedRoute roles={['admin']}>
+              <AdminConfig />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/stats"
+          element={
+            <ProtectedRoute roles={['admin']}>
+              <AdminStats />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/teacher/questions"
+          element={
+            <ProtectedRoute roles={['teacher', 'admin']}>
+              <TeacherQuestions />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/teacher/exams"
+          element={
+            <ProtectedRoute roles={['teacher', 'admin']}>
+              <TeacherExams />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/teacher/grading"
+          element={
+            <ProtectedRoute roles={['teacher', 'admin']}>
+              <TeacherGrading />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/teacher/results"
+          element={
+            <ProtectedRoute roles={['teacher', 'admin']}>
+              <TeacherResults />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/reports"
+          element={
+            <ProtectedRoute roles={['teacher', 'admin']}>
+              <Reports />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/announcements"
+          element={
+            <ProtectedRoute roles={['admin', 'teacher', 'student']}>
+              <Announcements />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/notifications"
+          element={
+            <ProtectedRoute roles={['admin', 'teacher', 'student']}>
+              <Notifications />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/student/exams"
+          element={
+            <ProtectedRoute roles={['student', 'admin']}>
+              <StudentExams />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/student/sessions/:sessionId"
+          element={
+            <ProtectedRoute roles={['student', 'admin']}>
+              <TakeExam />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/student/sessions/:sessionId/results"
+          element={
+            <ProtectedRoute roles={['student', 'admin']}>
+              <Results />
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
+    </Shell>
   );
 }

@@ -1,183 +1,245 @@
-import { useEffect, useState } from "react";
-import { apiFetch } from "../api";
-import { useSchoolStore } from "../store/school";
+import { useEffect, useState } from 'react';
+import * as XLSX from 'xlsx';
+import PageHeader from '../components/PageHeader';
+import Loading from '../components/Loading';
+import { apiFetch } from '../api';
 
-type User = { id: string; email: string; role: "admin" | "teacher" | "student" };
-type SchoolProfile = {
-  name: string;
-  tagline: string;
-  logoUrl: string;
-  bannerUrl: string;
-  themeColor: string;
+type User = {
+  id: string;
+  username: string;
+  email?: string | null;
+  role: 'admin' | 'teacher' | 'student';
+  created_at: string;
 };
 
-export default function AdminUsersPage() {
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState({ email: "", password: "", role: "teacher" });
-  const [profile, setProfile] = useState<SchoolProfile>({
-    name: "",
-    tagline: "",
-    logoUrl: "",
-    bannerUrl: "",
-    themeColor: "#2563eb"
-  });
-  const setGlobalProfile = useSchoolStore((state) => state.setProfile);
+type UserResponse = {
+  total: number;
+  page: number;
+  page_size: number;
+  data: User[];
+};
 
-  async function loadUsers() {
+export default function AdminUsers() {
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [form, setForm] = useState({ username: '', password: '', role: 'teacher' });
+  const [importMessage, setImportMessage] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [total, setTotal] = useState(0);
+
+  const load = async () => {
     setLoading(true);
-    setError(null);
+    setError('');
     try {
-      const data = await apiFetch<User[]>("/admin/users");
-      setUsers(data);
+      const data = await apiFetch<UserResponse>(`/admin/users?page=${page}&page_size=${pageSize}`);
+      setUsers(data.data);
+      setTotal(data.total);
     } catch (err: any) {
-      setError(err.message || "Gagal memuat user");
+      setError(err.message);
     } finally {
       setLoading(false);
     }
-  }
+  };
 
   useEffect(() => {
-    loadUsers();
-    loadProfile();
-  }, []);
+    load();
+  }, [page, pageSize]);
 
-  async function loadProfile() {
-    const data = await apiFetch<SchoolProfile>("/admin/school-profile");
-    setProfile(data);
-  }
+  const handleCreate = async () => {
+    try {
+      await apiFetch('/admin/users', {
+        method: 'POST',
+        body: JSON.stringify(form)
+      });
+      setForm({ username: '', password: '', role: 'teacher' });
+      await load();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
 
-  async function saveProfile(e: React.FormEvent) {
-    e.preventDefault();
-    await apiFetch("/admin/school-profile", {
-      method: "PUT",
-      body: JSON.stringify(profile)
-    });
-    setGlobalProfile(profile);
-  }
+  const handleTemplateDownload = (type: 'csv' | 'xlsx') => {
+    const rows = [
+      ['username', 'password', 'role', 'name', 'nis', 'class', 'email'],
+      ['siswa1', 'Siswa123!', 'student', 'Siswa Satu', '12345', 'X IPA 1', ''],
+      ['guru1', 'Guru123!', 'teacher', 'Guru Satu', '', '', '']
+    ];
+    if (type === 'csv') {
+      const csv = rows.map((row) => row.map((cell) => `"${cell}"`).join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'template-user.csv';
+      link.click();
+      URL.revokeObjectURL(url);
+      return;
+    }
 
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
-    await apiFetch("/admin/users", {
-      method: "POST",
-      body: JSON.stringify(form)
-    });
-    setForm({ email: "", password: "", role: "teacher" });
-    loadUsers();
-  }
+    const worksheet = XLSX.utils.aoa_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Template');
+    XLSX.writeFile(workbook, 'template-user.xlsx');
+  };
+
+  const handleImportFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setImportMessage('');
+    try {
+      let csvText = '';
+      if (file.name.endsWith('.csv')) {
+        csvText = await file.text();
+      } else {
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        csvText = XLSX.utils.sheet_to_csv(sheet);
+      }
+      const result = await apiFetch<{ inserted: number; skipped: number }>('/admin/import/users', {
+        method: 'POST',
+        body: JSON.stringify({ csv: csvText })
+      });
+      setImportMessage(
+        `Import selesai. Berhasil: ${result.inserted}, dilewati: ${result.skipped}.`
+      );
+      await load();
+    } catch (err: any) {
+      setImportMessage(err.message);
+    } finally {
+      event.target.value = '';
+    }
+  };
+
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
-    <div className="min-h-screen px-6 py-8">
-      <div className="mx-auto max-w-6xl space-y-6">
-        <header className="floating-nav rounded-3xl px-6 py-4">
-          <h1 className="text-xl font-semibold">Admin Control Room</h1>
-          <p className="text-sm text-slate-500">Kelola akun admin, guru, siswa, dan identitas sekolah.</p>
-        </header>
-
-        <main className="grid gap-6 lg:grid-cols-[1fr,2fr]">
-          <div className="space-y-6">
-            <form onSubmit={handleCreate} className="glass-card rounded-3xl p-6 space-y-3">
-              <h2 className="font-semibold">Tambah User</h2>
-              <input
-                className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2"
-                placeholder="Email"
-                value={form.email}
-                onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
-              />
-              <input
-                className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2"
-                placeholder="Password"
-                type="password"
-                value={form.password}
-                onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
-              />
-              <select
-                className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2"
-                value={form.role}
-                onChange={(e) => setForm((prev) => ({ ...prev, role: e.target.value }))}
-              >
-                <option value="admin">Admin</option>
-                <option value="teacher">Guru</option>
-                <option value="student">Siswa</option>
-              </select>
-              <button className="w-full rounded-xl btn-primary py-2 font-medium">
-                Buat User
-              </button>
-              {error && <p className="text-sm text-red-600">{error}</p>}
-            </form>
-
-            <form onSubmit={saveProfile} className="glass-card rounded-3xl p-6 space-y-3">
-              <h2 className="font-semibold">Identitas Sekolah</h2>
-              <input
-                className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2"
-                placeholder="Nama sekolah"
-                value={profile.name}
-                onChange={(e) => setProfile((prev) => ({ ...prev, name: e.target.value }))}
-              />
-              <input
-                className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2"
-                placeholder="Tagline"
-                value={profile.tagline}
-                onChange={(e) => setProfile((prev) => ({ ...prev, tagline: e.target.value }))}
-              />
-              <input
-                className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2"
-                placeholder="URL Logo"
-                value={profile.logoUrl}
-                onChange={(e) => setProfile((prev) => ({ ...prev, logoUrl: e.target.value }))}
-              />
-              <input
-                className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2"
-                placeholder="URL Banner"
-                value={profile.bannerUrl}
-                onChange={(e) => setProfile((prev) => ({ ...prev, bannerUrl: e.target.value }))}
-              />
-              <div className="flex items-center gap-3">
-                <input
-                  type="color"
-                  className="h-10 w-14 rounded-lg border border-slate-200"
-                  value={profile.themeColor}
-                  onChange={(e) => setProfile((prev) => ({ ...prev, themeColor: e.target.value }))}
-                />
-                <div className="text-sm text-slate-500">Warna utama</div>
-              </div>
-              <button className="w-full rounded-xl btn-primary py-2 font-medium">
-                Simpan Identitas
-              </button>
-            </form>
+    <div>
+      <PageHeader
+        title="Manajemen User"
+        subtitle="Buat akun admin/guru/siswa dan kelola akses."
+      />
+      <div className="grid gap-6 md:grid-cols-3">
+        <div className="glass-panel p-5 rounded-2xl">
+          <h3 className="font-semibold mb-3">Tambah User</h3>
+          <div className="space-y-3">
+            <label className="text-xs text-slate-500">Username</label>
+            <input
+              className="input input-bordered w-full"
+              placeholder="Username"
+              value={form.username}
+              onChange={(event) => setForm({ ...form, username: event.target.value })}
+            />
+            <label className="text-xs text-slate-500">Password</label>
+            <input
+              className="input input-bordered w-full"
+              placeholder="Password"
+              type="password"
+              value={form.password}
+              onChange={(event) => setForm({ ...form, password: event.target.value })}
+            />
+            <label className="text-xs text-slate-500">Role</label>
+            <select
+              className="select select-bordered w-full"
+              value={form.role}
+              onChange={(event) => setForm({ ...form, role: event.target.value })}
+            >
+              <option value="admin">Admin</option>
+              <option value="teacher">Guru</option>
+              <option value="student">Siswa</option>
+            </select>
+            <button className="btn btn-primary w-full" onClick={handleCreate}>
+              Simpan
+            </button>
+            {error && <p className="text-sm text-error">{error}</p>}
           </div>
-
-          <div className="glass-card rounded-3xl p-6">
-            <div className="flex items-center justify-between">
-              <h2 className="font-semibold">Daftar User</h2>
-              <button className="text-sm text-brand-700" onClick={loadUsers}>
-                Refresh
-              </button>
-            </div>
-            {loading && <p className="text-sm text-slate-500 mt-3">Memuat...</p>}
-            <div className="mt-4 space-y-3">
-              {users.map((user) => (
-                <div key={user.id} className="soft-card rounded-2xl p-4 hover-float">
-                  <div className="text-sm font-medium">{user.email}</div>
-                  <div className="text-xs text-slate-500 mt-1">Role: {user.role}</div>
-                  <div className="mt-2 flex gap-2">
-                    <button
-                      className="text-xs text-red-600"
-                      onClick={async () => {
-                        await apiFetch(`/admin/users/${user.id}`, { method: "DELETE" });
-                        loadUsers();
-                      }}
-                    >
-                      Hapus
-                    </button>
-                  </div>
+          <div className="divider"></div>
+          <h4 className="font-semibold mb-2">Import Bulk (CSV/XLSX)</h4>
+          <p className="text-xs text-slate-500 mb-2">
+            Kolom wajib: username, password. Role: admin/teacher/student.
+          </p>
+          <label className="text-xs text-slate-500">Upload File</label>
+          <input
+            className="file-input file-input-bordered w-full"
+            type="file"
+            accept=".csv,.xlsx"
+            onChange={handleImportFile}
+          />
+          <div className="flex gap-2 mt-2">
+            <button className="btn btn-outline btn-xs" onClick={() => handleTemplateDownload('csv')}>
+              Download CSV
+            </button>
+            <button className="btn btn-outline btn-xs" onClick={() => handleTemplateDownload('xlsx')}>
+              Download XLSX
+            </button>
+          </div>
+          {importMessage && <p className="text-xs text-slate-500 mt-2">{importMessage}</p>}
+        </div>
+        <div className="md:col-span-2 glass-panel p-5 rounded-2xl">
+          <h3 className="font-semibold mb-3">Daftar User</h3>
+          {loading ? (
+            <Loading />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Username</th>
+                    <th>Role</th>
+                    <th>Dibuat</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((user) => (
+                    <tr key={user.id}>
+                      <td>{user.username}</td>
+                      <td className="uppercase text-xs font-semibold">{user.role}</td>
+                      <td>{new Date(user.created_at).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="flex items-center justify-between mt-4">
+                <span className="text-xs text-slate-500">Total {total} user</span>
+                <div className="flex items-center gap-2">
+                  <select
+                    className="select select-bordered select-xs"
+                    value={pageSize}
+                    onChange={(event) => {
+                      setPageSize(Number(event.target.value));
+                      setPage(1);
+                    }}
+                  >
+                    {[10, 20, 30].map((size) => (
+                      <option key={size} value={size}>
+                        {size}/hal
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className="btn btn-outline btn-xs"
+                    onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                    disabled={page <= 1}
+                  >
+                    Prev
+                  </button>
+                  <span className="text-xs text-slate-500">
+                    {page} / {totalPages}
+                  </span>
+                  <button
+                    className="btn btn-outline btn-xs"
+                    onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                    disabled={page >= totalPages}
+                  >
+                    Next
+                  </button>
                 </div>
-              ))}
-              {users.length === 0 && <p className="text-sm text-slate-500">Belum ada user.</p>}
+              </div>
             </div>
-          </div>
-        </main>
+          )}
+        </div>
       </div>
     </div>
   );

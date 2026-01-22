@@ -1,97 +1,106 @@
-# Ujian Online (MVP)
+# Ujian Online Sekolah (MVP)
 
-Monorepo sederhana untuk platform ujian online berbasis Bun + Elysia (backend) dan React + Tailwind (frontend).
+Monorepo sederhana untuk backend (Bun + Elysia) dan frontend (React + daisyUI). Fokus pada Phase 1: auth, bank soal, ujian, auto-grading, dan hasil.
 
 ## Struktur
-- `backend`: API Elysia + MySQL
-- `frontend`: UI React
+- `backend/` API server Bun + Elysia
+- `frontend/` React + TypeScript + daisyUI
+- `schema.sql` (MySQL) and `schema.sqlite.sql` (SQLite) schemas
 
-## Backend Setup
-1. Siapkan database MySQL dan jalankan skema:
-   ```sql
-   SOURCE backend/schema.sql;
-   ```
-2. Buat file `.env` di `backend` (lihat `.env.example`).
-3. Install dependencies:
-   ```bash
-   bun install
-   ```
-4. Jalankan API:
-   ```bash
-   bun run dev
-   ```
-5. Buat akun uji otomatis:
-   ```bash
-   bun run seed
-   ```
-6. Buat soal dan ujian contoh:
-   ```bash
-   bun run seed:questions
-   ```
-7. Jalankan unit test backend:
-   ```bash
-   bun test
-   ```
+## Backend
 
-## Frontend Setup
-1. Buat file `.env` di `frontend` (lihat `.env.example`).
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Jalankan UI:
-   ```bash
-   npm run dev
-   ```
-4. Jalankan unit test frontend:
-   ```bash
-   npm run test
-   ```
+### Setup
+```bash
+cd backend
+bun install
+cp .env.example .env
+bun dev
+```
 
-## Deployment (Docker)
-1. Siapkan `.env` di root project (opsional):
-   ```env
-   DB_PASSWORD=root
-   DB_NAME=ujian_online
-   JWT_SECRET=replace-with-secure-secret
-   VITE_API_URL=http://localhost:3001
-   ```
-2. Jalankan:
-   ```bash
-   docker compose up --build
-   ```
-3. Akses UI di `http://localhost:8080`.
+Set `DATABASE_TYPE` to `mysql` (default) or `sqlite`. When using SQLite, point `DATABASE_URL` to a file path (e.g., `./data/ujian.sqlite`) or `:memory:`; migrations will pick `schema.sqlite.sql` automatically.
 
-## Akun Uji Coba
-- Admin: `admin@ujian.local` / `Admin123!`
-- Guru: `guru@ujian.local` / `Guru123!`
-- Siswa: `siswa@ujian.local` / `Siswa123!`
+Contoh konfigurasi SQLite:
+```bash
+DATABASE_TYPE=sqlite
+DATABASE_URL=./data/ujian.sqlite
+```
 
-## Import/Export
-- Import siswa: gunakan tab `Import/Export` di panel guru.
-  - Kolom Excel/CSV: `NIS`, `nama`, `kelas`, `email`
-  - `kelas` bisa format `level/major/rombel` atau `level-major-rombel`
-  - Password default: `Siswa123!`
-- Import soal: kolom Excel/CSV
-  - `mapel`, `type`, `content`, `options`, `answer_key`, `mode`, `keywords`, `explanation`
-  - `options` dan `answer_key` bisa dipisah dengan `|` atau `,`
-- Export nilai: tab `Import/Export` -> pilih ujian -> download CSV/Excel.
+Optional cache (multi-instance):
+```bash
+CACHE_DRIVER=redis
+REDIS_URL=redis://localhost:6379
+```
 
-## Reporting & Analytics
-- Panel guru -> tab Ujian -> pilih ujian -> "Muat analytics".
-- Menampilkan distribusi nilai dan statistik per soal (attempts, correct, difficulty).
-- Export analytics: tombol download CSV atau PDF setelah analytics dimuat.
-- Export rapor siswa: di daftar sesi ujian klik "Download Rapor PDF".
-- Export rapor siswa CSV/Excel: di daftar sesi ujian klik tombol CSV atau Excel.
+Optional global throttling (multi-instance):
+```bash
+QUEUE_DRIVER=redis
+REDIS_URL=redis://localhost:6379
+QUEUE_GLOBAL_MAX_QUEUE=1000
+QUEUE_GLOBAL_ANSWER_CONCURRENCY=10
+QUEUE_GLOBAL_SUBMIT_CONCURRENCY=3
+```
+Set `QUEUE_DRIVER=memory` to keep per-instance throttling only.
 
-## Bank Soal + Gambar
-- Guru dapat upload maksimal 3 gambar per soal pada form Bank Soal.
-- Gambar tampil proporsional di halaman ujian siswa.
+### Migrasi dan Seed
+```bash
+cd backend
+bun run migrate
+bun run seed
+```
 
-## Konfigurasi Identitas Sekolah
-- Admin -> menu Kelola User -> bagian "Identitas Sekolah".
-- Isi nama, tagline, logo URL, banner URL, dan warna tema.
+### Endpoint utama
+- `POST /auth/login`
+- `POST /auth/register` (hanya untuk setup awal)
+- `GET /admin/users`
+- `POST /admin/import/users` (CSV/XLSX via frontend)
+- `GET /admin/school-profile`
+- `PUT /admin/school-profile`
+- `GET /admin/insights`
+- `GET /admin/queue-settings`
+- `PUT /admin/queue-settings`
+- `POST /teacher/subjects`
+- `POST /teacher/questions`
+- `POST /teacher/import/questions` (CSV)
+- `GET /teacher/export/questions` (CSV)
+- `GET /teacher/essay-submissions`
+- `POST /teacher/questions/bulk-delete`
+- `POST /teacher/exams/bulk-delete`
+- `POST /teacher/exams`
+- `GET /teacher/exams/:id/results`
+- `GET /teacher/exams/:id/results.csv`
+- `POST /student/exams/:id/start`
+- `POST /student/sessions/:id/submit`
+- `GET /reports/overview`
+- `GET /reports/exams/:id/summary`
+- `GET /reports/exams`
+- `GET /announcements`
+- `POST /announcements`
+- `GET /notifications/me`
+- `POST /notifications`
+- `PUT /notifications/:id/read`
+
+## Frontend
+
+```bash
+cd frontend
+npm install
+cp .env.example .env
+npm run dev
+```
+
+## Docker (terpisah)
+
+```bash
+# Backend
+cd backend
+docker build -t ujian-backend .
+
+# Frontend
+cd frontend
+docker build -t ujian-frontend .
+```
 
 ## Catatan
-- Bootstrap user: gunakan form register pada halaman login untuk membuat admin pertama.
-- MVP fokus pada Phase 1 sesuai `agent.md`.
+- Migrate untuk MySQL (`schema.sql`) atau SQLite (`schema.sqlite.sql`) otomatis disesuaikan berdasarkan `DATABASE_TYPE`.
+- Set `DATABASE_URL` ke koneksi MySQL (`mysql://...`) atau ke path SQLite/`:memory:` saat `DATABASE_TYPE=sqlite`.
+- JWT secret harus diganti untuk production.
