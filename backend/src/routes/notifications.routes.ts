@@ -1,9 +1,15 @@
 import { Elysia } from 'elysia';
-import { query } from '../db';
+import { DatabaseContext, getDefaultContext } from '../db';
 import type { Role, UserPayload } from '../types';
-import { authGuard } from './helpers';
+import { authGuard } from '../utils/helpers';
+import { createNotificationService } from '../services/notification.service';
 
-export const registerNotificationRoutes = (app: Elysia) => {
+type Deps = { db?: DatabaseContext };
+
+export const registerNotificationRoutes = (app: Elysia, deps: Deps = {}) => {
+  const db = deps.db ?? getDefaultContext();
+  const service = createNotificationService({ db });
+
   app.group('/notifications', (notifications) =>
     notifications
       .guard(authGuard(['admin', 'teacher', 'student']))
@@ -12,23 +18,7 @@ export const registerNotificationRoutes = (app: Elysia) => {
         const filters = queryParams as Record<string, string>;
         const page = Math.max(1, Number(filters.page ?? 1));
         const pageSize = Math.min(100, Math.max(5, Number(filters.page_size ?? 10)));
-        const offset = (page - 1) * pageSize;
-        const baseSql =
-          'FROM notifications WHERE (user_id = ? OR target_role IN (?, ?))';
-        const params = [payload.id, payload.role, 'all'];
-        const [countRows, items] = await Promise.all([
-          query<any>(`SELECT COUNT(*) as total ${baseSql}`, params),
-          query<any>(
-            `SELECT * ${baseSql} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
-            [...params, pageSize, offset]
-          )
-        ]);
-        return {
-          total: Number(countRows[0]?.total ?? 0),
-          page,
-          page_size: pageSize,
-          data: items
-        };
+        return service.listForUser(payload.id, payload.role, page, pageSize);
       })
       .post('/', async ({ body, set }) => {
         const payload = body as {
@@ -42,23 +32,10 @@ export const registerNotificationRoutes = (app: Elysia) => {
           set.status = 400;
           return { error: 'title and body required' };
         }
-        const id = crypto.randomUUID();
-        await query(
-          'INSERT INTO notifications (id, user_id, target_role, title, body, channel, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [
-            id,
-            payload.user_id ?? null,
-            payload.target_role ?? 'all',
-            payload.title,
-            payload.body,
-            payload.channel ?? 'in_app',
-            'pending'
-          ]
-        );
-        return { id };
+        return service.create(payload);
       })
       .put('/:id/read', async ({ params }) => {
-        await query('UPDATE notifications SET status = ? WHERE id = ?', ['read', params.id]);
+        await service.markRead(params.id);
         return { success: true };
       })
   );

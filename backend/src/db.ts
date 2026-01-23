@@ -18,19 +18,47 @@ export interface DatabaseClient {
   close(): Promise<void>;
 }
 
+export type DatabaseContext = {
+  client: DatabaseClient;
+  query<T>(sql: string, params?: DbParams): Promise<T[]>;
+  execute(sql: string, params?: DbParams): Promise<void>;
+};
+
 export function createDatabaseClient(): DatabaseClient {
   return databaseType === 'sqlite'
     ? createSqliteClient(databaseUrl)
     : createMysqlClient(databaseUrl);
 }
 
-let defaultClient: DatabaseClient | null = null;
+export function createDatabaseContext(client?: DatabaseClient): DatabaseContext {
+  const db = client ?? createDatabaseClient();
+  return {
+    client: db,
+    query: <T>(sql: string, params: DbParams = []) => db.query<T>(sql, params),
+    execute: (sql: string, params: DbParams = []) => db.execute(sql, params)
+  };
+}
 
-function getDefaultClient(): DatabaseClient {
+let defaultClient: DatabaseClient | null = null;
+let defaultContext: DatabaseContext | null = null;
+
+export function setDefaultClient(client: DatabaseClient) {
+  defaultClient = client;
+  defaultContext = createDatabaseContext(client);
+}
+
+export function getDefaultClient(): DatabaseClient {
   if (!defaultClient) {
     defaultClient = createDatabaseClient();
   }
   return defaultClient;
+}
+
+export function getDefaultContext(): DatabaseContext {
+  if (!defaultContext) {
+    defaultContext = createDatabaseContext(getDefaultClient());
+  }
+  return defaultContext;
 }
 
 export const query = <T>(sql: string, params: DbParams = []): Promise<T[]> =>
@@ -40,6 +68,9 @@ export const execute = (sql: string, params: DbParams = []): Promise<void> =>
   getDefaultClient().execute(sql, params);
 
 export const closeDatabase = async (): Promise<void> => {
+  if (defaultContext) {
+    defaultContext = null;
+  }
   if (!defaultClient) return;
   await defaultClient.close();
   defaultClient = null;

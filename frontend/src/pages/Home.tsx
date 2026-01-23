@@ -1,5 +1,6 @@
 import { useAuthStore } from '../store';
 import { Link } from 'react-router-dom';
+import InfoTable from '../components/InfoTable';
 
 export default function Home() {
   const { user } = useAuthStore();
@@ -27,9 +28,14 @@ export default function Home() {
     <div className="grid gap-6 md:grid-cols-2">
       <div className="glass-panel p-6 rounded-2xl">
         <h2 className="text-xl font-semibold">Halo, {user.username}</h2>
-        <p className="text-slate-500 mt-2">
-          Role: <span className="font-medium">{user.role}</span>
-        </p>
+        <div className="mt-4">
+          <InfoTable
+            rows={[
+              { label: 'Role', value: user.role },
+              { label: 'Email', value: user.email ?? '—' }
+            ]}
+          />
+        </div>
         <p className="text-slate-500 mt-4">
           Pilih menu di kanan atas untuk mulai mengelola ujian atau mengerjakan ujian.
         </p>

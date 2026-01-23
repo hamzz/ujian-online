@@ -14,13 +14,13 @@ type QueuedTask<T> = {
   reject: (error: unknown) => void;
 };
 
-type QueueThrottle = {
+export type QueueThrottle = {
   tryEnqueue(maxQueue: number): Promise<void>;
   tryAcquire(maxConcurrency: number): Promise<boolean>;
   release(): Promise<void>;
 };
 
-class AsyncQueue {
+export class AsyncQueue {
   private queue: Array<QueuedTask<any>> = [];
   private active = 0;
   private concurrency: number;
