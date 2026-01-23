@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import PageHeader from '../components/PageHeader';
 import Loading from '../components/Loading';
 import { apiFetch } from '../api';
@@ -23,6 +23,10 @@ type ExamPayload = {
 export default function TakeExam() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const isPublic = location.pathname.startsWith('/public/');
+  const apiPrefix = isPublic ? '/public' : '/student';
+  const routePrefix = isPublic ? '/public' : '/student';
   const [payload, setPayload] = useState<ExamPayload | null>(null);
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
@@ -45,7 +49,7 @@ export default function TakeExam() {
       setLoading(true);
       setError('');
       try {
-        const data = await apiFetch<ExamPayload>(`/student/sessions/${sessionId}`);
+        const data = await apiFetch<ExamPayload>(`${apiPrefix}/sessions/${sessionId}`);
         setPayload(data);
         const duration = data.exam.duration_minutes * 60 * 1000;
         setRemaining(duration);
@@ -56,7 +60,7 @@ export default function TakeExam() {
       }
     };
     load();
-  }, [sessionId]);
+  }, [sessionId, apiPrefix]);
 
   useEffect(() => {
     if (!payload) return;
@@ -111,7 +115,7 @@ export default function TakeExam() {
   useEffect(() => {
     if (!payload || !sessionId) return;
     const heartbeat = window.setInterval(() => {
-      apiFetch(`/student/sessions/${sessionId}/heartbeat`, {
+      apiFetch(`${apiPrefix}/sessions/${sessionId}/heartbeat`, {
         method: 'POST',
         body: JSON.stringify({
           status: navigator.onLine ? 'online' : 'offline'
@@ -129,7 +133,7 @@ export default function TakeExam() {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [payload, sessionId]);
+  }, [payload, sessionId, apiPrefix]);
 
   useEffect(() => {
     if (!payload) return;
@@ -140,7 +144,7 @@ export default function TakeExam() {
 
   const sendLog = async (event: string, detail?: Record<string, unknown>) => {
     if (!sessionId) return;
-    await apiFetch(`/student/sessions/${sessionId}/logs`, {
+    await apiFetch(`${apiPrefix}/sessions/${sessionId}/logs`, {
       method: 'POST',
       body: JSON.stringify({ event, detail })
     }).catch(() => null);
@@ -149,7 +153,7 @@ export default function TakeExam() {
   const handleAnswer = async (questionId: string, response: any) => {
     setAnswers((prev) => ({ ...prev, [questionId]: response }));
     if (!sessionId) return;
-    await apiFetch(`/student/sessions/${sessionId}/answer`, {
+    await apiFetch(`${apiPrefix}/sessions/${sessionId}/answer`, {
       method: 'POST',
       body: JSON.stringify({ question_id: questionId, response })
     });
@@ -159,8 +163,8 @@ export default function TakeExam() {
     if (submitting || !sessionId) return;
     setSubmitting(true);
     try {
-      await apiFetch(`/student/sessions/${sessionId}/submit`, { method: 'POST' });
-      navigate(`/student/sessions/${sessionId}/results`);
+      await apiFetch(`${apiPrefix}/sessions/${sessionId}/submit`, { method: 'POST' });
+      navigate(`${routePrefix}/sessions/${sessionId}/results`);
     } catch (err: any) {
       setError(err.message);
     } finally {

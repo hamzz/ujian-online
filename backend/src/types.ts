@@ -22,6 +22,10 @@ export type ExamSettings = {
   timerMode?: 'countdown' | 'countup';
   autoSubmit?: boolean;
   showExplanation?: 'never' | 'always' | 'wrong_only';
+  simpleAccess?: {
+    enabled?: boolean;
+    requireClass?: boolean;
+  };
   antiCheat?: {
     fullscreen?: boolean;
     blockCopy?: boolean;

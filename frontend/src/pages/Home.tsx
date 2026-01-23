@@ -11,9 +11,14 @@ export default function Home() {
         <p className="text-slate-500 mt-2">
           Platform ujian dengan bank soal, penilaian otomatis, dan laporan ringkas.
         </p>
-        <Link to="/login" className="btn btn-primary mt-6">
-          Mulai
-        </Link>
+        <div className="flex flex-wrap justify-center gap-3 mt-6">
+          <Link to="/login" className="btn btn-primary">
+            Login
+          </Link>
+          <Link to="/join" className="btn btn-outline">
+            Masuk Ujian
+          </Link>
+        </div>
       </div>
     );
   }

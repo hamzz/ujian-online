@@ -20,6 +20,14 @@ export const registerTeacherRoutes = (app: Elysia) => {
     await query(`DELETE FROM exams WHERE id IN (${placeholders})`, examIds);
   };
 
+  const resolveParticipant = (row: any) => {
+    const profile = parseJson<Record<string, unknown>>(row.profile_data, {});
+    return {
+      name: (profile.display_name as string) ?? row.username ?? '',
+      class_name: (profile.class_name as string) ?? ''
+    };
+  };
+
   app.group('/teacher', (teacher) =>
     teacher
       .guard(authGuard(['teacher', 'admin']))
@@ -348,7 +356,7 @@ export const registerTeacherRoutes = (app: Elysia) => {
       .get('/exams/:id/results', async ({ params }) => {
         const rows = await query<any>(
           `SELECT s.id as session_id, s.start_time, s.end_time, s.status,
-                  u.username, g.total_score, g.grade_letter
+                  u.username, u.profile_data, g.total_score, g.grade_letter
            FROM exam_sessions s
            JOIN users u ON u.id = s.user_id
            LEFT JOIN grades g ON g.session_id = s.id
@@ -356,15 +364,20 @@ export const registerTeacherRoutes = (app: Elysia) => {
            ORDER BY s.start_time DESC`,
           [params.id]
         );
-        return rows.map((row) => ({
-          ...row,
-          total_score: row.total_score !== null ? Number(row.total_score) : null
-        }));
+        return rows.map((row) => {
+          const participant = resolveParticipant(row);
+          return {
+            ...row,
+            username: participant.name,
+            class_name: participant.class_name,
+            total_score: row.total_score !== null ? Number(row.total_score) : null
+          };
+        });
       })
       .get('/exams/:id/results.csv', async ({ params, set }) => {
         const rows = await query<any>(
           `SELECT s.id as session_id, s.start_time, s.end_time, s.status,
-                  u.username, g.total_score, g.grade_letter
+                  u.username, u.profile_data, g.total_score, g.grade_letter
            FROM exam_sessions s
            JOIN users u ON u.id = s.user_id
            LEFT JOIN grades g ON g.session_id = s.id
@@ -373,11 +386,13 @@ export const registerTeacherRoutes = (app: Elysia) => {
           [params.id]
         );
         const csvRows: string[][] = [
-          ['username', 'session_id', 'status', 'start_time', 'end_time', 'total_score', 'grade_letter']
+          ['username', 'class_name', 'session_id', 'status', 'start_time', 'end_time', 'total_score', 'grade_letter']
         ];
         for (const row of rows) {
+          const participant = resolveParticipant(row);
           csvRows.push([
-            row.username ?? '',
+            participant.name,
+            participant.class_name,
             row.session_id ?? '',
             row.status ?? '',
             row.start_time ? new Date(row.start_time).toISOString() : '',
@@ -430,7 +445,7 @@ export const registerTeacherRoutes = (app: Elysia) => {
       .get('/essay-submissions', async () => {
         const submissions = await query<any>(
           `SELECT a.session_id, a.question_id, a.response, a.score, q.content, e.title as exam_title,
-                  s.user_id, u.username
+                  s.user_id, u.username, u.profile_data
            FROM answers a
            JOIN questions q ON q.id = a.question_id
            JOIN exam_sessions s ON s.id = a.session_id
@@ -441,6 +456,7 @@ export const registerTeacherRoutes = (app: Elysia) => {
         );
         return submissions.map((row) => ({
           ...row,
+          username: resolveParticipant(row).name,
           response: parseJson(row.response, null)
         }));
       })

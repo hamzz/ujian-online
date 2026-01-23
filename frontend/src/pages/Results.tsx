@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import PageHeader from '../components/PageHeader';
 import Loading from '../components/Loading';
 import { apiFetch } from '../api';
@@ -11,6 +11,9 @@ type ResultPayload = {
 
 export default function Results() {
   const { sessionId } = useParams();
+  const location = useLocation();
+  const isPublic = location.pathname.startsWith('/public/');
+  const apiPrefix = isPublic ? '/public' : '/student';
   const [result, setResult] = useState<ResultPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -20,7 +23,7 @@ export default function Results() {
       setLoading(true);
       setError('');
       try {
-        const data = await apiFetch<ResultPayload>(`/student/sessions/${sessionId}/results`);
+        const data = await apiFetch<ResultPayload>(`${apiPrefix}/sessions/${sessionId}/results`);
         setResult(data);
       } catch (err: any) {
         setError(err.message);
@@ -29,7 +32,7 @@ export default function Results() {
       }
     };
     if (sessionId) load();
-  }, [sessionId]);
+  }, [sessionId, apiPrefix]);
 
   if (loading) return <Loading />;
   if (error) return <div className="alert alert-error">{error}</div>;

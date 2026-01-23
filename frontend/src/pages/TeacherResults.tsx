@@ -18,6 +18,7 @@ type PagedResponse<T> = {
 type ResultRow = {
   session_id: string;
   username: string;
+  class_name?: string;
   status: string;
   start_time: string;
   end_time: string | null;
@@ -107,7 +108,8 @@ export default function TeacherResults() {
           <table className="table">
             <thead>
               <tr>
-                <th>Username</th>
+                <th>Nama</th>
+                <th>Kelas</th>
                 <th>Status</th>
                 <th>Mulai</th>
                 <th>Selesai</th>
@@ -119,6 +121,7 @@ export default function TeacherResults() {
               {results.map((row) => (
                 <tr key={row.session_id}>
                   <td>{row.username}</td>
+                  <td>{row.class_name || '-'}</td>
                   <td>{row.status}</td>
                   <td>{row.start_time ? new Date(row.start_time).toLocaleString() : '-'}</td>
                   <td>{row.end_time ? new Date(row.end_time).toLocaleString() : '-'}</td>
@@ -128,7 +131,7 @@ export default function TeacherResults() {
               ))}
               {!results.length && (
                 <tr>
-                  <td colSpan={6} className="text-center text-slate-500">
+                  <td colSpan={7} className="text-center text-slate-500">
                     Belum ada data hasil.
                   </td>
                 </tr>

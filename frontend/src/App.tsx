@@ -5,6 +5,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import { hydrateAuth, useAuthStore } from './store';
 import Home from './pages/Home';
 import Login from './pages/Login';
+import JoinExam from './pages/JoinExam';
 import AdminUsers from './pages/AdminUsers';
 import AdminStats from './pages/AdminStats';
 import AdminConfig from './pages/AdminConfig';
@@ -47,6 +48,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/join" element={<JoinExam />} />
         <Route
           path="/admin/users"
           element={
@@ -151,6 +153,8 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+        <Route path="/public/sessions/:sessionId" element={<TakeExam />} />
+        <Route path="/public/sessions/:sessionId/results" element={<Results />} />
       </Routes>
     </Shell>
   );

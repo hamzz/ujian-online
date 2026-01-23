@@ -54,6 +54,7 @@ export default function TeacherExams() {
     shuffleQuestions: true,
     shuffleOptions: true,
     attempts: 1,
+    simpleAccess: false,
     start_time: '',
     deadline: ''
   });
@@ -129,7 +130,11 @@ export default function TeacherExams() {
           perPage: 'single',
           timerMode: 'countdown',
           autoSubmit: true,
-          attempts: Number(form.attempts)
+          attempts: Number(form.attempts),
+          simpleAccess: {
+            enabled: form.simpleAccess,
+            requireClass: true
+          }
         },
         questions: selectedQuestions.map((question_id) => ({ question_id, weight: 1 }))
       };
@@ -152,6 +157,7 @@ export default function TeacherExams() {
         shuffleQuestions: true,
         shuffleOptions: true,
         attempts: 1,
+        simpleAccess: false,
         start_time: '',
         deadline: ''
       });
@@ -175,6 +181,7 @@ export default function TeacherExams() {
         shuffleQuestions: data.settings?.shuffleQuestions ?? true,
         shuffleOptions: data.settings?.shuffleOptions ?? true,
         attempts: data.settings?.attempts ?? 1,
+        simpleAccess: data.settings?.simpleAccess?.enabled ?? false,
         start_time: data.start_time ? data.start_time.slice(0, 16) : '',
         deadline: data.deadline ? data.deadline.slice(0, 16) : ''
       });
@@ -302,6 +309,17 @@ export default function TeacherExams() {
               />
               <span className="label-text">Acak opsi</span>
             </label>
+            <label className="label cursor-pointer justify-start gap-2">
+              <input
+                type="checkbox"
+                className="toggle toggle-primary"
+                checked={form.simpleAccess}
+                onChange={(event) =>
+                  setForm({ ...form, simpleAccess: event.target.checked })
+                }
+              />
+              <span className="label-text">Tanpa login (nama + kelas + kode ujian)</span>
+            </label>
             <button className="btn btn-primary w-full" onClick={handleCreate}>
               {editingExamId ? 'Update Ujian' : 'Simpan Ujian'}
             </button>
@@ -319,6 +337,7 @@ export default function TeacherExams() {
                     shuffleQuestions: true,
                     shuffleOptions: true,
                     attempts: 1,
+                    simpleAccess: false,
                     start_time: '',
                     deadline: ''
                   });

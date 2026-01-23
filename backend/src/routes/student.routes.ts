@@ -3,6 +3,7 @@ import { databaseType, query } from '../db';
 import type { ExamSettings, UserPayload } from '../types';
 import { computeGradeLetter, gradeAnswer } from '../utils/grading';
 import { getCacheClient } from '../utils/cache';
+import { hashPassword } from '../utils/auth';
 import { authGuard, now, parseJson } from './helpers';
 import { answerQueue, queueSettings, submitQueue } from './queue';
 
@@ -48,6 +49,90 @@ export const registerStudentRoutes = (app: Elysia) => {
     }));
     await cache.set(`exam-questions:${examId}`, parsed, cacheTtlSeconds);
     return parsed;
+  };
+
+  const normalizeGuestKey = (value: string) =>
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9-]/g, '')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+
+  const buildSimpleUsername = (name: string, className: string) => {
+    const nameKey = normalizeGuestKey(name);
+    const classKey = normalizeGuestKey(className);
+    const base = [nameKey, classKey].filter(Boolean).join('-') || 'student';
+    return `guest_${base}`;
+  };
+
+  const getOrCreateSimpleUser = async (name: string, className: string) => {
+    const username = buildSimpleUsername(name, className);
+    const existing = await query<any>('SELECT * FROM users WHERE username = ?', [username]);
+    if (existing.length > 0) {
+      const current = existing[0];
+      const profile = parseJson<Record<string, unknown>>(current.profile_data, {});
+      const nextProfile = {
+        ...profile,
+        display_name: name,
+        class_name: className,
+        access_mode: 'simple'
+      };
+      if (JSON.stringify(profile) !== JSON.stringify(nextProfile)) {
+        await query('UPDATE users SET profile_data = ? WHERE id = ?', [
+          JSON.stringify(nextProfile),
+          current.id
+        ]);
+      }
+      return current;
+    }
+
+    const id = crypto.randomUUID();
+    const passwordHash = await hashPassword(crypto.randomUUID());
+    const profile = {
+      display_name: name,
+      class_name: className,
+      access_mode: 'simple'
+    };
+    await query(
+      'INSERT INTO users (id, username, email, password_hash, role, profile_data) VALUES (?, ?, ?, ?, ?, ?)',
+      [id, username, null, passwordHash, 'student', JSON.stringify(profile)]
+    );
+    return { id, username, role: 'student', profile_data: JSON.stringify(profile) };
+  };
+
+  const loadSimpleSession = async (sessionId: string, set: { status: number }) => {
+    const sessions = await query<any>(
+      'SELECT s.*, u.profile_data FROM exam_sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?',
+      [sessionId]
+    );
+    const session = sessions[0];
+    if (!session) {
+      set.status = 404;
+      return { error: 'Session not found' };
+    }
+
+    const exams = await query<any>('SELECT * FROM exams WHERE id = ?', [session.exam_id]);
+    const exam = exams[0];
+    if (!exam) {
+      set.status = 404;
+      return { error: 'Exam not found' };
+    }
+
+    const settings = parseJson<ExamSettings>(exam.settings, {});
+    if (!settings.simpleAccess?.enabled) {
+      set.status = 403;
+      return { error: 'Simple access is disabled' };
+    }
+
+    const profile = parseJson<Record<string, unknown>>(session.profile_data, {});
+    if (profile.access_mode !== 'simple') {
+      set.status = 403;
+      return { error: 'Access denied' };
+    }
+
+    return { session, exam, settings };
   };
 
   app.group('/student', (student) =>
@@ -273,6 +358,235 @@ export const registerStudentRoutes = (app: Elysia) => {
         }
       })
       .get('/sessions/:id/results', async ({ params, set }) => {
+        const grades = await query<any>('SELECT * FROM grades WHERE session_id = ?', [params.id]);
+        if (!grades.length) {
+          set.status = 404;
+          return { error: 'Grade not found' };
+        }
+        const answers = await query<any>('SELECT * FROM answers WHERE session_id = ?', [params.id]);
+        return {
+          grade: grades[0],
+          answers: answers.map((row) => ({
+            ...row,
+            response: parseJson(row.response, null)
+          }))
+        };
+      })
+  );
+
+  app.group('/public', (publicApi) =>
+    publicApi
+      .post('/exams/start', async ({ body, set }) => {
+        const payload = body as { code?: string; name?: string; class_name?: string };
+        const code = (payload.code ?? '').trim().toUpperCase();
+        const name = (payload.name ?? '').trim();
+        const className = (payload.class_name ?? '').trim();
+        if (!code || !name || !className) {
+          set.status = 400;
+          return { error: 'code, name, and class_name are required' };
+        }
+
+        const exams = await query<any>('SELECT * FROM exams WHERE code = ?', [code]);
+        const exam = exams[0];
+        if (!exam) {
+          set.status = 404;
+          return { error: 'Exam not found' };
+        }
+
+        const settings = parseJson<ExamSettings>(exam.settings, {});
+        if (!settings.simpleAccess?.enabled) {
+          set.status = 403;
+          return { error: 'Simple access is disabled for this exam' };
+        }
+
+        const nowTimestamp = databaseType === 'sqlite' ? toLocalSqliteTimestamp(now()) : now();
+        const currentTime = now().getTime();
+        const startTime = exam.start_time ? new Date(exam.start_time).getTime() : null;
+        const deadline = exam.deadline ? new Date(exam.deadline).getTime() : null;
+        if (startTime && currentTime < startTime) {
+          set.status = 403;
+          return { error: 'Exam not started yet' };
+        }
+        if (deadline && currentTime > deadline) {
+          set.status = 403;
+          return { error: 'Exam deadline passed' };
+        }
+
+        const user = await getOrCreateSimpleUser(name, className);
+        const attemptsAllowed = settings.attempts ?? 1;
+        const existingSessions = await query<any>(
+          'SELECT * FROM exam_sessions WHERE exam_id = ? AND user_id = ? ORDER BY start_time DESC',
+          [exam.id, user.id]
+        );
+        const inProgress = existingSessions.find((session) => session.status === 'in_progress');
+        if (inProgress) {
+          return { session_id: inProgress.id };
+        }
+        if (attemptsAllowed && existingSessions.length >= attemptsAllowed) {
+          set.status = 403;
+          return { error: 'Attempt limit reached' };
+        }
+
+        await getCachedQuestions(exam.id).catch(() => null);
+        const sessionId = crypto.randomUUID();
+        await query(
+          'INSERT INTO exam_sessions (id, exam_id, user_id, start_time, status, logs) VALUES (?, ?, ?, ?, ?, ?)',
+          [sessionId, exam.id, user.id, nowTimestamp, 'in_progress', JSON.stringify([])]
+        );
+        return { session_id: sessionId };
+      })
+      .get('/sessions/:id', async ({ params, set }) => {
+        const result = await loadSimpleSession(params.id, set);
+        if ('error' in result) return { error: result.error };
+        const { session, exam, settings } = result;
+        const cachedQuestions = await getCachedQuestions(session.exam_id);
+        let ordered = cachedQuestions.map((question) => ({ ...question }));
+        if (settings.shuffleQuestions) {
+          ordered = [...ordered].sort(() => Math.random() - 0.5);
+        }
+        if (settings.shuffleOptions) {
+          ordered = ordered.map((question) => {
+            if (!Array.isArray(question.options)) return question;
+            return { ...question, options: [...question.options].sort(() => Math.random() - 0.5) };
+          });
+        }
+        return {
+          session: {
+            id: session.id,
+            exam_id: session.exam_id,
+            start_time: session.start_time,
+            status: session.status
+          },
+          exam: {
+            id: exam.id,
+            title: exam.title,
+            instructions: exam.instructions,
+            duration_minutes: exam.duration_minutes,
+            settings
+          },
+          questions: ordered
+        };
+      })
+      .post('/sessions/:id/answer', async ({ params, body, set }) => {
+        const sessionCheck = await loadSimpleSession(params.id, set);
+        if ('error' in sessionCheck) return { error: sessionCheck.error };
+        const payload = body as { question_id: string; response: unknown };
+        if (!payload.question_id) {
+          set.status = 400;
+          return { error: 'question_id required' };
+        }
+        try {
+          await answerQueue.enqueue(async () => {
+            await query(answersUpsertSql, [
+              params.id,
+              payload.question_id,
+              JSON.stringify(payload.response)
+            ]);
+          }, queueSettings.maxQueue);
+          return { success: true };
+        } catch (err: any) {
+          set.status = 429;
+          return { error: 'Queue is full' };
+        }
+      })
+      .post('/sessions/:id/logs', async ({ params, body, set }) => {
+        const sessionCheck = await loadSimpleSession(params.id, set);
+        if ('error' in sessionCheck) return { error: sessionCheck.error };
+        const payload = body as { event: string; detail?: Record<string, unknown> };
+        const sessions = await query<any>('SELECT logs FROM exam_sessions WHERE id = ?', [params.id]);
+        const current = sessions[0]?.logs ? parseJson<any[]>(sessions[0].logs, []) : [];
+        const updated = [
+          ...current,
+          { event: payload.event, detail: payload.detail ?? {}, at: now().toISOString() }
+        ];
+        await query('UPDATE exam_sessions SET logs = ? WHERE id = ?', [
+          JSON.stringify(updated),
+          params.id
+        ]);
+        return { success: true };
+      })
+      .post('/sessions/:id/heartbeat', async ({ params, body, set }) => {
+        const sessionCheck = await loadSimpleSession(params.id, set);
+        if ('error' in sessionCheck) return { error: sessionCheck.error };
+        const payload = body as { status?: string; detail?: Record<string, unknown> };
+        const sessions = await query<any>('SELECT logs FROM exam_sessions WHERE id = ?', [params.id]);
+        const current = sessions[0]?.logs ? parseJson<any[]>(sessions[0].logs, []) : [];
+        const updated = [
+          ...current,
+          { event: 'heartbeat', detail: payload.detail ?? {}, status: payload.status ?? 'ok', at: now().toISOString() }
+        ];
+        await query('UPDATE exam_sessions SET logs = ? WHERE id = ?', [
+          JSON.stringify(updated),
+          params.id
+        ]);
+        return { success: true };
+      })
+      .post('/sessions/:id/submit', async ({ params, set }) => {
+        const sessionCheck = await loadSimpleSession(params.id, set);
+        if ('error' in sessionCheck) return { error: sessionCheck.error };
+        try {
+          const result = await submitQueue.enqueue(async () => {
+            const sessions = await query<any>('SELECT * FROM exam_sessions WHERE id = ?', [
+              params.id
+            ]);
+            const session = sessions[0];
+            if (!session) {
+              set.status = 404;
+              return { error: 'Session not found' };
+            }
+
+            const questions = await query<any>(
+              'SELECT q.*, eq.weight FROM exam_questions eq JOIN questions q ON q.id = eq.question_id WHERE eq.exam_id = ?',
+              [session.exam_id]
+            );
+            const answers = await query<any>('SELECT * FROM answers WHERE session_id = ?', [
+              params.id
+            ]);
+
+            let totalWeight = 0;
+            let totalScore = 0;
+
+            for (const question of questions) {
+              const weight = Number(question.weight ?? 1);
+              totalWeight += weight;
+              const answer = answers.find((entry) => entry.question_id === question.id);
+              const response = answer ? parseJson(answer.response, null) : null;
+              const score = gradeAnswer(
+                {
+                  type: question.type,
+                  answer_key: parseJson(question.answer_key, {})
+                },
+                { response }
+              );
+              const weightedScore = score * weight;
+              totalScore += weightedScore;
+              await query(
+                'UPDATE answers SET score = ? WHERE session_id = ? AND question_id = ?',
+                [weightedScore, params.id, question.id]
+              );
+            }
+
+            const normalizedScore = totalWeight > 0 ? (totalScore / totalWeight) * 100 : 0;
+            const gradeLetter = computeGradeLetter(normalizedScore);
+
+            await query(gradesUpsertSql, [params.id, normalizedScore, gradeLetter]);
+            const endTimestamp = databaseType === 'sqlite' ? toLocalSqliteTimestamp(now()) : now();
+            await query('UPDATE exam_sessions SET status = ?, end_time = ? WHERE id = ?', [
+              'submitted',
+              endTimestamp,
+              params.id
+            ]);
+            return { total_score: normalizedScore, grade_letter: gradeLetter };
+          }, queueSettings.maxQueue);
+          return result;
+        } catch (err: any) {
+          set.status = 429;
+          return { error: 'Queue is full' };
+        }
+      })
+      .get('/sessions/:id/results', async ({ params, set }) => {
+        const sessionCheck = await loadSimpleSession(params.id, set);
+        if ('error' in sessionCheck) return { error: sessionCheck.error };
         const grades = await query<any>('SELECT * FROM grades WHERE session_id = ?', [params.id]);
         if (!grades.length) {
           set.status = 404;
